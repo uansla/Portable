@@ -44,7 +44,6 @@ namespace SafeEject
 
             uint devInst;
             var locate = CM_Locate_DevNodeW(out devInst, device.DeviceId, 0);
-
             if (locate == CR_SUCCESS)
             {
                 int veto;
@@ -60,14 +59,13 @@ namespace SafeEject
 
                 var vetoText = new string(vetoName).TrimEnd('\0');
                 if (!string.IsNullOrWhiteSpace(vetoText))
-                    message = "Windows 拒绝弹出，正在使用：" + vetoText;
+                    message = "Windows 拒绝弹出：" + vetoText;
+                else
+                    message = "Windows 拒绝弹出，设备可能仍被程序占用。";
             }
-
-            var ps = PowerShellBridge.TryEject(device);
-            if (ps.Success)
+            else
             {
-                message = ps.Message;
-                return true;
+                message = "无法定位设备的 PnP 实例。";
             }
 
             foreach (var raw in (device.Letters ?? "").Split(
@@ -78,7 +76,7 @@ namespace SafeEject
                     continue;
 
                 var handle = CreateFile(
-                    @"\\.\" + drive,
+                    @"\\." + "\\" + drive,
                     0x80000000 | 0x40000000,
                     3,
                     IntPtr.Zero,
@@ -111,12 +109,6 @@ namespace SafeEject
                     CloseHandle(handle);
                 }
             }
-
-            if (string.IsNullOrWhiteSpace(message))
-                message = ps.Message;
-
-            if (string.IsNullOrWhiteSpace(message))
-                message = "Windows 拒绝弹出。请关闭仍在访问该设备的程序后重试。";
 
             return false;
         }
