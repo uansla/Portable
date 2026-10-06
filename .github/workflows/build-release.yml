@@ -1,0 +1,48 @@
+name: SafeEject Portable Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET Core 3.1
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 3.1.426
+
+      - name: Restore
+        run: dotnet restore SafeEject/SafeEject.csproj
+
+      - name: Publish single-file Win32 executable
+        run: dotnet publish SafeEject/SafeEject.csproj -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish
+
+      - name: Verify output
+        shell: powershell
+        run: |
+          if (!(Test-Path 'publish\SafeEject.exe')) { throw 'SafeEject.exe was not produced.' }
+          Get-Item 'publish\SafeEject.exe' | Format-List FullName,Length
+
+      - name: Package
+        shell: powershell
+        run: Compress-Archive -Path 'publish\SafeEject.exe' -DestinationPath 'SafeEject-Portable-v1.0.0-win32.zip' -Force
+
+      - name: Create or update v1.0.0 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.0.0 >/dev/null 2>&1; then
+            gh release upload v1.0.0 SafeEject-Portable-v1.0.0-win32.zip --clobber
+          else
+            gh release create v1.0.0 SafeEject-Portable-v1.0.0-win32.zip --title 'SafeEject Portable v1.0.0' --notes 'Windows 7/8/8.1/10/11 single-file portable build.'
+          fi
