@@ -15,10 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Build tiny .NET Framework 4.8 tray executable
         shell: powershell
         run: |
-          msbuild SafeEject/SafeEject.csproj /restore /p:Configuration=Release /p:Platform=AnyCPU /p:TargetFrameworkRootPath="C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework"
+          msbuild SafeEject/SafeEject.csproj /restore /p:Configuration=Release /p:Platform=AnyCPU
 
       - name: Verify executable
         shell: powershell
