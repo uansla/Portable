@@ -1,4 +1,4 @@
-name: SafeEject Portable Build
+name: SafeEject Tray Build
 
 on:
   push:
@@ -15,34 +15,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET Core 3.1
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 3.1.426
-
-      - name: Restore
-        run: dotnet restore SafeEject/SafeEject.csproj
-
-      - name: Publish single-file Win32 executable
-        run: dotnet publish SafeEject/SafeEject.csproj -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish
-
-      - name: Verify output
+      - name: Build tiny .NET Framework 4.8 tray executable
         shell: powershell
         run: |
-          if (!(Test-Path 'publish\SafeEject.exe')) { throw 'SafeEject.exe was not produced.' }
-          Get-Item 'publish\SafeEject.exe' | Format-List FullName,Length
+          msbuild SafeEject/SafeEject.csproj /restore /p:Configuration=Release /p:Platform=AnyCPU /p:TargetFrameworkRootPath="C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework"
+
+      - name: Verify executable
+        shell: powershell
+        run: |
+          if (!(Test-Path 'SafeEject\bin\Release\SafeEject.exe')) { throw 'SafeEject.exe was not produced.' }
+          Get-Item 'SafeEject\bin\Release\SafeEject.exe' | Format-List FullName,Length
 
       - name: Package
         shell: powershell
-        run: Compress-Archive -Path 'publish\SafeEject.exe' -DestinationPath 'SafeEject-Portable-v1.0.0-win32.zip' -Force
+        run: |
+          Copy-Item 'SafeEject\bin\Release\SafeEject.exe' 'SafeEject-Portable-v1.1.0.exe' -Force
+          Compress-Archive -Path 'SafeEject-Portable-v1.1.0.exe' -DestinationPath 'SafeEject-Tray-v1.1.0.zip' -Force
 
-      - name: Create or update v1.0.0 Release
+      - name: Create or update v1.1.0 Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.0.0 >/dev/null 2>&1; then
-            gh release upload v1.0.0 SafeEject-Portable-v1.0.0-win32.zip --clobber
+          if gh release view v1.1.0 >/dev/null 2>&1; then
+            gh release upload v1.1.0 SafeEject-Tray-v1.1.0.zip --clobber
           else
-            gh release create v1.0.0 SafeEject-Portable-v1.0.0-win32.zip --title 'SafeEject Portable v1.0.0' --notes 'Windows 7/8/8.1/10/11 single-file portable build.'
+            gh release create v1.1.0 SafeEject-Tray-v1.1.0.zip --title 'SafeEject Tray v1.1.0' --notes 'Tiny Windows 7-11 tray utility. Requires .NET Framework 4.8; first run as administrator installs an elevated logon task.'
           fi
