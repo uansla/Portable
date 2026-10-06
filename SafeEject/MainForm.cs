@@ -1,47 +1,161 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace SafeEject
 {
-    public sealed class MainForm : Form
+    internal sealed class MainForm : ApplicationContext
     {
-        private readonly ListBox list = new ListBox();
-        private readonly Button refresh = new Button();
-        private readonly Button eject = new Button();
-        private readonly Label status = new Label();
+        private readonly NotifyIcon _tray;
+        private readonly ContextMenuStrip _menu;
+        private bool _refreshing;
 
         public MainForm()
         {
-            Text = "SafeEject Portable 1.0";
-            Width = 720; Height = 430; StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false;
-            list.SetBounds(15,15,674,280); list.Font = new Font("Microsoft YaHei UI",10);
-            refresh.Text="刷新设备"; refresh.SetBounds(15,310,130,32);
-            eject.Text="安全弹出选中设备"; eject.SetBounds(160,310,180,32);
-            status.SetBounds(15,355,674,40); status.Text="正在扫描 USB / 移动存储设备…";
-            Controls.AddRange(new Control[]{list,refresh,eject,status});
-            refresh.Click += delegate { LoadDevices(); };
-            eject.Click += delegate { EjectSelected(); };
-            Shown += delegate { LoadDevices(); };
+            _menu = new ContextMenuStrip();
+            _tray = new NotifyIcon
+            {
+                Icon = SystemIcons.Shield,
+                Text = "SafeEject - USB安全弹出",
+                Visible = true,
+                ContextMenuStrip = _menu
+            };
+
+            _tray.MouseClick += TrayMouseClick;
+            _tray.DoubleClick += delegate { ShowDevices(); };
+
+            RefreshMenu();
+            InstallAutoStart();
         }
 
-        private void LoadDevices()
+        private void TrayMouseClick(object sender, MouseEventArgs e)
         {
-            list.Items.Clear();
-            try {
-                foreach(var d in DeviceManager.GetUsbDisks()) list.Items.Add(d);
-                status.Text=list.Items.Count==0?"未发现 USB 存储设备。":"发现 "+list.Items.Count+" 个 USB 存储设备。";
-            } catch(Exception ex){ status.Text="扫描失败："+ex.Message; }
+            if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Right)
+                ShowDevices();
         }
 
-        private void EjectSelected()
+        private void ShowDevices()
         {
-            var d=list.SelectedItem as DeviceInfo;
-            if(d==null){status.Text="请先选择要弹出的设备。";return;}
-            if(MessageBox.Show("确定安全移除以下设备？\r\n\r\n"+d.ToString(),"SafeEject",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-            string msg; var ok=Ejector.TryEject(d,out msg); status.Text=msg;
-            if(ok) LoadDevices(); else MessageBox.Show(msg,"无法弹出",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            RefreshMenu();
+            _menu.Show(Cursor.Position);
+        }
+
+        private void RefreshMenu()
+        {
+            if (_refreshing) return;
+            _refreshing = true;
+            try
+            {
+                _menu.Items.Clear();
+
+                var devices = DeviceManager.GetUsbDisks();
+                if (devices.Count == 0)
+                {
+                    var empty = new ToolStripMenuItem("没有检测到 USB / TF 存储设备")
+                    {
+                        Enabled = false
+                    };
+                    _menu.Items.Add(empty);
+                }
+                else
+                {
+                    foreach (var device in devices)
+                    {
+                        var item = new ToolStripMenuItem(FormatDevice(device));
+                        item.Tag = device;
+                        item.Click += EjectMenuItem_Click;
+                        _menu.Items.Add(item);
+                    }
+                }
+
+                _menu.Items.Add(new ToolStripSeparator());
+                var refresh = new ToolStripMenuItem("刷新设备");
+                refresh.Click += delegate { RefreshMenu(); };
+                _menu.Items.Add(refresh);
+
+                var startup = new ToolStripMenuItem("开机自动启动")
+                {
+                    Checked = StartupManager.IsInstalled()
+                };
+                startup.Click += delegate
+                {
+                    if (StartupManager.IsInstalled())
+                        StartupManager.Uninstall();
+                    else
+                        StartupManager.Install();
+                    RefreshMenu();
+                };
+                _menu.Items.Add(startup);
+
+                _menu.Items.Add(new ToolStripSeparator());
+                var exit = new ToolStripMenuItem("退出 SafeEject");
+                exit.Click += delegate { ExitThread(); };
+                _menu.Items.Add(exit);
+            }
+            catch (Exception ex)
+            {
+                _menu.Items.Clear();
+                _menu.Items.Add(new ToolStripMenuItem("读取设备失败: " + ex.Message) { Enabled = false });
+            }
+            finally
+            {
+                _refreshing = false;
+            }
+        }
+
+        private static string FormatDevice(DeviceInfo d)
+        {
+            var letters = string.IsNullOrWhiteSpace(d.Letters) ? "无盘符" : d.Letters;
+            var gb = d.Size > 0 ? (d.Size / 1024d / 1024d / 1024d).ToString("0.##") + " GB" : "容量未知";
+            return letters + "  |  " + d.Model + "  |  " + gb;
+        }
+
+        private void EjectMenuItem_Click(object sender, EventArgs e)
+        {
+            var item = sender as ToolStripMenuItem;
+            var device = item == null ? null : item.Tag as DeviceInfo;
+            if (device == null) return;
+
+            string message;
+            var ok = Ejector.TryEject(device, out message);
+
+            if (ok)
+            {
+                _tray.ShowBalloonTip(1800, "SafeEject", "已安全弹出：" + device.Letters, ToolTipIcon.Info);
+                RefreshMenu();
+            }
+            else
+            {
+                _tray.ShowBalloonTip(3000, "SafeEject", message, ToolTipIcon.Warning);
+            }
+        }
+
+        private void InstallAutoStart()
+        {
+            try
+            {
+                if (!StartupManager.IsInstalled())
+                    StartupManager.Install();
+            }
+            catch
+            {
+                // The tray utility must remain usable even if task creation is unavailable.
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_tray != null)
+                {
+                    _tray.Visible = false;
+                    _tray.Dispose();
+                }
+                if (_menu != null) _menu.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 }
