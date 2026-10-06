@@ -26,13 +26,13 @@ jobs:
       - name: Verify executable
         shell: powershell
         run: |
-          if (!(Test-Path 'SafeEject\bin\Release\SafeEject.exe')) { throw 'SafeEject.exe was not produced.' }
-          Get-Item 'SafeEject\bin\Release\SafeEject.exe' | Format-List FullName,Length
+          if (!(Test-Path 'SafeEject\bin\Release\net48\SafeEject.exe')) { throw 'SafeEject.exe was not produced.' }
+          Get-Item 'SafeEject\bin\Release\net48\SafeEject.exe' | Format-List FullName,Length
 
       - name: Package
         shell: powershell
         run: |
-          Copy-Item 'SafeEject\bin\Release\SafeEject.exe' 'SafeEject-Portable-v1.1.0.exe' -Force
+          Copy-Item 'SafeEject\bin\Release\net48\SafeEject.exe' 'SafeEject-Portable-v1.1.0.exe' -Force
           Compress-Archive -Path 'SafeEject-Portable-v1.1.0.exe' -DestinationPath 'SafeEject-Tray-v1.1.0.zip' -Force
 
       - name: Create or update v1.1.0 Release
