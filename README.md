@@ -1,27 +1,44 @@
-# SafeEject Portable v1.0
+# SafeEject Tray v1.1
 
-轻量 USB / TF 卡 / 移动硬盘安全弹出工具，用于解决关闭窗口、卸载加密卷后设备仍无法“安全删除”的情况。
+一个常驻 Windows 任务栏通知区域的 USB / TF 卡 / 移动硬盘安全弹出工具。
 
-## 功能
+## 使用方式
 
-- 显示 USB 存储设备名称、容量和盘符
-- 选择单个设备安全弹出
-- 优先调用 Windows 原生 PnP 安全移除 API
-- PowerShell 兼容后备路径，兼容 Windows 7
-- 不默认结束 Explorer，不使用 `mountvol /p` 强制卸载
-- 单文件 `SafeEject.exe`
-- 目标 Windows 7 / 8 / 8.1 / 10 / 11（Windows 7 建议 SP1）
-- 管理员权限运行
+1. 第一次运行 **SafeEject.exe** 时使用“以管理员身份运行”。
+2. 程序不会打开主窗口，而是在 Windows 任务栏右下角通知区域显示 SafeEject 图标。
+3. 第一次管理员运行会自动创建“开机自动启动”任务。
+4. 以后插入 U 盘、TF 卡或移动硬盘后，直接点击任务栏右下角 SafeEject 图标。
+5. 菜单会列出当前检测到的 USB 存储设备，点击对应设备即可安全弹出。
+6. 弹出成功后可以直接拔出设备，不需要再次打开 EXE。
 
-## 发布
+## v1.1 改进
 
-GitHub Actions 自动构建 Win32 单文件版本：
+- 改为常驻通知区域，不再弹出主窗口。
+- 左键或右键点击托盘图标都可以直接选择设备。
+- 插入/拔出设备后通过“刷新设备”重新读取。
+- 管理员首次运行后自动创建 Windows 登录启动任务。
+- 使用 Windows 原生 PnP 安全移除 API。
+- 去掉 PowerShell 后备脚本和自包含 .NET Core Runtime。
+- 改用 **.NET Framework 4.8**，发布 EXE 大幅缩小。
+- 单 EXE 发布，不需要额外 DLL。
+- 兼容 Windows 7 SP1、Windows 8/8.1、Windows 10、Windows 11。
+- 不强制结束 Explorer，不使用 `mountvol /p`。
 
-`SafeEject-Portable-v1.0.0-win32.zip`
+## 注意
 
-正常使用只需要解压并运行 `SafeEject.exe`，PowerShell 后备脚本已经嵌入 EXE。
+- Windows 7 需要安装 .NET Framework 4.8（建议 Windows 7 SP1）。
+- 首次安装/运行必须有管理员权限，因为程序需要创建高权限登录启动任务并执行设备安全移除。
+- 如果 Windows 报告设备仍在使用，先关闭正在访问 U 盘/TF 卡的程序，再点击托盘图标重试。
+- v1.1 使用原生 PnP 弹出流程，不再通过 PowerShell Disable 设备，避免把“禁用设备”误当成“安全弹出”。
 
-## 原理
+## 发布文件
 
-程序首先通过 Windows `CM_Request_Device_Eject` 请求安全移除；Windows 会根据设备状态和驱动返回成功或占用/拒绝原因。该 API 是 Windows 官方提供的可移动设备安全移除接口。
+GitHub Actions 会生成：
 
+`SafeEject-Tray-v1.1.0.zip`
+
+压缩包内只有：
+
+`SafeEject-Portable-v1.1.0.exe`
+
+首次运行建议右键 EXE → **以管理员身份运行**。
